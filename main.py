@@ -10,7 +10,7 @@ from astrbot.api import logger, AstrBotConfig
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent 
 import astrbot.api.message_components as Comp
 
-@register("random_wife", "Gemini", "活跃成员抽老婆(全局限制版)", "2.6.0")
+@register("random_wife", "Gemini", "活跃成员抽老婆(实时成员校验版)", "2.7.3")
 class RandomWifePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None): 
         super().__init__(context)
@@ -130,10 +130,30 @@ class RandomWifePlugin(Star):
                 yield event.plain_result(f"你今天已经抽了{today_count}次老婆了，明天再来吧！")
             return
 
+        # --- 增强：获取最新的群成员列表以过滤退群者 ---
+        current_member_ids = []
+        try:
+            if event.get_platform_name() == "aiocqhttp":
+                assert isinstance(event, AiocqhttpMessageEvent)
+                members = await event.bot.api.call_action('get_group_member_list', group_id=int(group_id))
+                current_member_ids = [str(m.get("user_id")) for m in members]
+        except Exception as e:
+            logger.error(f"获取群成员列表失败，将使用缓存池: {e}")
+
         active_pool = self.active_users.get(group_id, {})
         excluded = {str(uid) for uid in self.config.get("excluded_users", [])}
-        excluded.update([bot_id, user_id, "0"]) # 确保不抽中 "0"
-        pool = [uid for uid in active_pool.keys() if uid not in excluded]
+        excluded.update([bot_id, user_id, "0"]) 
+        
+        # 核心逻辑：如果在 aiocqhttp 平台，只从【当前还在群里】的人中抽取
+        if current_member_ids:
+            pool = [uid for uid in active_pool.keys() if uid not in excluded and uid in current_member_ids]
+            # 同时顺便清理一下 active_users，把不在群里的人删掉
+            removed_uids = [uid for uid in active_pool.keys() if uid not in current_member_ids]
+            if removed_uids:
+                for r_uid in removed_uids: del self.active_users[group_id][r_uid]
+                self._save_json(self.active_file, self.active_users)
+        else:
+            pool = [uid for uid in active_pool.keys() if uid not in excluded]
         
         if not pool:
             yield event.plain_result("老婆池为空（需有人在30天内发言）。")
@@ -144,8 +164,7 @@ class RandomWifePlugin(Star):
         
         try:
             if event.get_platform_name() == "aiocqhttp":
-                assert isinstance(event, AiocqhttpMessageEvent)
-                members = await event.bot.api.call_action('get_group_member_list', group_id=int(group_id))
+                # 这里已经有 members 列表了，直接查名字
                 for m in members:
                     if str(m.get("user_id")) == wife_id:
                         wife_name = m.get("card") or m.get("nickname") or wife_name
@@ -208,7 +227,7 @@ class RandomWifePlugin(Star):
             "2. 【我的老婆】：查看今日历史与次数\n"
             "3. 【重置记录】：(管理员) 清空数据\n"
             f"当前每日上限：{daily_limit}次\n"
-            "注：仅限30天内发言的活跃群友。"
+            "注：仅限30天内发言且当前在群的活跃群友。"
         )
         yield event.plain_result(help_text)
 
