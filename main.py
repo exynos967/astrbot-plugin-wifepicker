@@ -11,7 +11,6 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import Aioc
 import astrbot.api.message_components as Comp
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
-@register("random_wife", "Gemini", "活跃成员抽老婆(实时成员校验版)", "2.7.3")
 class RandomWifePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None): 
         super().__init__(context)
