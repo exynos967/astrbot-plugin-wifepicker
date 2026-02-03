@@ -187,7 +187,10 @@ class RandomWifePlugin(Star):
             Comp.At(qq=user_id),
             Comp.Plain(f" 你的今日老婆是：\n\n【{wife_name}】\n"),
             Comp.Image.fromURL(avatar_url),
-            Comp.Plain(f"\n剩余抽取次数：{max(0, daily_limit - today_count - 1)}次")
+            #Comp.Plain(f"\n请好好对待她哦❤️~ \n\n"),
+            Comp.Plain(
+            f"\n请好好对待她哦❤️~ \n"
+            f"剩余抽取次数：{max(0, daily_limit - today_count - 1)}次")
         ]
         yield event.chain_result(chain)
 
