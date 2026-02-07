@@ -3,7 +3,8 @@ import json
 import os
 import random
 import time
-from datetime import datetime
+#from datetime import datetime
+from datetime import datetime, timedelta
 
 import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
@@ -631,24 +632,35 @@ class RandomWifePlugin(Star):
             return
 
         now = time.time()
-
+        now_dt = datetime.now()
+        
+        # 获取上次强娶的时间戳和日期
+        last_time = self.forced_records[group_id].get(user_id, 0)
+        last_dt = datetime.fromtimestamp(last_time)
+        
         # 从配置读取 CD 天数
         cd_days = self.config.get("force_marry_cd", 3)
-        cool_down = cd_days * 24 * 3600
 
-        # --- 分群冷却核心逻辑 ---
-        if group_id not in self.forced_records:
-            self.forced_records[group_id] = {}
+        # --- 核心逻辑：计算目标重置日期 ---
+        # 逻辑是：取上次强娶那一天的 00:00，加上 cd_days 天。
+        # 比如 2.6 16:00 强娶，CD 3天，重置时间就是 2.6 00:00 + 3天 = 2.9 00:00
+        last_midnight = datetime.combine(last_dt.date(), datetime.min.time())
+        target_reset_dt = last_midnight + timedelta(days=cd_days)
+        target_reset_ts = target_reset_dt.timestamp()
 
-        last_time = self.forced_records[group_id].get(user_id, 0)
+        # 计算距离目标重置时刻还剩多少秒
+        remaining = target_reset_ts - now
 
-        if now - last_time < cool_down:
-            remaining = cool_down - (now - last_time)
+        if remaining > 0:
+            # 这里的计算会非常符合直觉：
+            # 只要没到那天的 00:00，就会显示剩余的天/时/分
             days = int(remaining // 86400)
             hours = int((remaining % 86400) // 3600)
             mins = int((remaining % 3600) // 60)
+            
             yield event.plain_result(
-                f"你已经强娶过啦！\n请等待：{days}天{hours}小时{mins}分后再试。"
+                f"你已经强娶过啦！\n请等待：{days}天{hours}小时{mins}分后再试。\n"
+                f"(重置时间：{target_reset_dt.strftime('%m-%d %H:%M')})"
             )
             return
 
