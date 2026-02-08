@@ -988,9 +988,8 @@ class RandomWifePlugin(Star):
                     "iterations": iter_count,
                 },
                 options={
-                    "type": "jpeg",
-                    "quality": 100,
-                    "device_scale_factor": 2,
+                    "type": "png",
+                    "quality": None,
                     "scale": "device",
                     # 必须传齐这四个参数，且必须是 int 或 float，不能是字符串
                     "clip": {
@@ -1078,8 +1077,8 @@ class RandomWifePlugin(Star):
                 "title": "❤️ 群rbq月榜 ❤️"
             }, 
             options={
-                "type": "jpeg",
-                "quality": 100,
+                "type": "png",
+                "quality": None,
                 "full_page": False, # 关闭全页面，配合 clip 使用
                 "clip": {
                     "x": 0,
@@ -1257,7 +1256,6 @@ class RandomWifePlugin(Star):
                 "iterations": 1000
             }, options={
                 "viewport": {"width": 1920, "height": view_height},
-                "device_scale_factor": 2,
                 "type": "jpeg",
                 "quality": 100,
                 "device_scale_factor_level": "ultra",
