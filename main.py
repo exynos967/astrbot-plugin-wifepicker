@@ -488,6 +488,9 @@ class RandomWifePlugin(Star):
         if not message_str:
             return
 
+        if event.is_at_or_wake_command:
+            return
+
         mode = self._get_keyword_trigger_mode()
         route = self._keyword_router.match_route(message_str, mode=mode)
         if route is None:
@@ -970,8 +973,8 @@ class RandomWifePlugin(Star):
         node_count = len(unique_nodes)
 
         # 假设我们想要从左上角 (0,0) 开始，裁剪一个动态高度的区域
-        clip_width = 2560
-        clip_height = 1440 + (max(0, node_count - 10) * 80)
+        clip_width = 1920
+        clip_height = 1080 + (max(0, node_count - 10) * 60)
 
         try:
             url = await self.html_render(
@@ -987,8 +990,8 @@ class RandomWifePlugin(Star):
                 options={
                     "type": "jpeg",
                     "quality": 100,
+                    "device_scale_factor": 2,
                     "scale": "device",
-                    "viewport_width": clip_width,
                     # 必须传齐这四个参数，且必须是 int 或 float，不能是字符串
                     "clip": {
                         "x": 0,
@@ -1065,7 +1068,7 @@ class RandomWifePlugin(Star):
             header_h = 100 
             item_h = 60 
             footer_h = 50
-            rank_width = 900
+            rank_width = 400
 
             dynamic_height = header_h + (len(top_10) * item_h) + footer_h
             # 渲染图片
@@ -1078,7 +1081,6 @@ class RandomWifePlugin(Star):
                 "type": "jpeg",
                 "quality": 100,
                 "full_page": False, # 关闭全页面，配合 clip 使用
-                "viewport_width": rank_width,
                 "clip": {
                     "x": 0,
                     "y": 0,
