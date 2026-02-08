@@ -325,6 +325,20 @@ class RandomWifePlugin(Star):
         except Exception as e:
             logger.error(f"保存数据失败: {e}")
 
+    @staticmethod
+    def _normalize_user_id_set(values: object) -> set[str]:
+        if not isinstance(values, (list, tuple, set)):
+            return set()
+        return {str(v) for v in values if str(v).strip()}
+
+    def _draw_excluded_users(self) -> set[str]:
+        return self._normalize_user_id_set(self.config.get("excluded_users", []))
+
+    def _force_marry_excluded_users(self) -> set[str]:
+        return self._normalize_user_id_set(
+            self.config.get("force_marry_excluded_users", []),
+        )
+
     def _is_allowed_group(self, group_id: str) -> bool:
         whitelist = self.config.get("whitelist_groups", [])
         blacklist = self.config.get("blacklist_groups", [])
@@ -612,7 +626,7 @@ class RandomWifePlugin(Star):
             logger.error(f"获取群成员列表失败，将使用缓存池: {e}")
 
         active_pool = self.active_users.get(group_id, {})
-        excluded = {str(uid) for uid in self.config.get("excluded_users", [])}
+        excluded = self._draw_excluded_users()
         excluded.update([bot_id, user_id, "0"])
 
         # 核心逻辑：如果在 aiocqhttp 平台，只从【当前还在群里】的人中抽取
@@ -747,6 +761,7 @@ class RandomWifePlugin(Star):
             return
 
         user_id = str(event.get_sender_id())
+        bot_id = str(event.get_self_id())
         group_id = str(event.get_group_id())
         if not self._is_allowed_group(group_id):
             return
@@ -791,6 +806,12 @@ class RandomWifePlugin(Star):
 
         if target_id == user_id:
             yield event.plain_result("不能娶自己！")
+            return
+
+        force_excluded = self._force_marry_excluded_users()
+        force_excluded.update({bot_id, "0"})
+        if target_id in force_excluded:
+            yield event.plain_result("该用户在强娶排除列表中，无法被强娶。")
             return
 
         # 获取名字
