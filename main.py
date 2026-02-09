@@ -23,6 +23,7 @@ from .onebot_api import extract_message_id
 from .waifu_relations import maybe_add_other_half_record
 
 from .src.constants import _DEFAULT_KEYWORD_ROUTES
+from .src.utils import load_json, save_json, normalize_user_id_set, extract_target_id_from_message
 
 class RandomWifePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None):
@@ -43,10 +44,10 @@ class RandomWifePlugin(Star):
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir, exist_ok=True)
             
-        self.records = self._load_json(self.records_file, {"date": "", "groups": {}})
-        self.active_users = self._load_json(self.active_file, {})
-        self.forced_records = self._load_json(self.forced_file, {})
-        self.rbq_stats = self._load_json(self.rbq_stats_file, {})
+        self.records = load_json(self.records_file, {"date": "", "groups": {}})
+        self.active_users = load_json(self.active_file, {})
+        self.forced_records = load_json(self.forced_file, {})
+        self.rbq_stats = load_json(self.rbq_stats_file, {})
 
         self._keyword_router = KeywordRouter(routes=_DEFAULT_KEYWORD_ROUTES)
         self._keyword_handlers = {
@@ -115,61 +116,15 @@ class RandomWifePlugin(Star):
                 new_stats[gid] = new_users
         
         self.rbq_stats = new_stats
-        self._save_json(self.rbq_stats_file, self.rbq_stats)
+        save_json(self.rbq_stats_file, self.rbq_stats)
 
-    def _load_json(self, path: str, default: object):
-        if not os.path.exists(path):
-            return default
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return default
-
-    def _save_json(self, path: str, data: object):
-        try:
-            # === 全局记录总量清理逻辑 ===
-            if path == self.records_file and "groups" in data:
-                max_total = self.config.get("max_records", 500)
-                all_recs = []
-                # 展平所有记录
-                for gid, gdata in data["groups"].items():
-                    for r in gdata.get("records", []):
-                        r["_gid"] = gid  # 临时记录所属群
-                        all_recs.append(r)
-                
-                # 如果超过全局上限
-                if len(all_recs) > max_total:
-                    # 按时间戳排序（最早的在前面）
-                    all_recs.sort(key=lambda x: x.get("timestamp", ""))
-                    # 只保留最后的 max_total 条
-                    keep_recs = all_recs[-max_total:]
-                    
-                    # 重新归类到各个群
-                    new_groups = {}
-                    for r in keep_recs:
-                        gid = r.pop("_gid")
-                        if gid not in new_groups:
-                            new_groups[gid] = {"records": []}
-                        new_groups[gid]["records"].append(r)
-                    data["groups"] = new_groups
-
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"保存数据失败: {e}")
 
     @staticmethod
-    def _normalize_user_id_set(values: object) -> set[str]:
-        if not isinstance(values, (list, tuple, set)):
-            return set()
-        return {str(v) for v in values if str(v).strip()}
-
     def _draw_excluded_users(self) -> set[str]:
-        return self._normalize_user_id_set(self.config.get("excluded_users", []))
+        return normalize_user_id_set(self.config.get("excluded_users", []))
 
     def _force_marry_excluded_users(self) -> set[str]:
-        return self._normalize_user_id_set(
+        return normalize_user_id_set(
             self.config.get("force_marry_excluded_users", []),
         )
 
@@ -270,7 +225,7 @@ class RandomWifePlugin(Star):
         if group_key not in self.active_users:
             self.active_users[group_key] = {}
         self.active_users[group_key][user_id] = time.time()
-        self._save_json(self.active_file, self.active_users)
+        save_json(self.active_file, self.active_users)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def track_active(self, event: AstrMessageEvent):
@@ -372,7 +327,7 @@ class RandomWifePlugin(Star):
         new_active = {uid: ts for uid, ts in active_group.items() if (now - ts < limit) and uid != "0"}
         if len(active_group) != len(new_active):
             self.active_users[group_id] = new_active
-            self._save_json(self.active_file, self.active_users)
+            save_json(self.active_file, self.active_users)
 
     @filter.command("今日老婆", alias={"抽老婆"})
     async def draw_wife(self, event: AstrMessageEvent):
@@ -478,7 +433,7 @@ class RandomWifePlugin(Star):
             if removed_uids:
                 for r_uid in removed_uids:
                     del self.active_users[group_id][r_uid]
-                self._save_json(self.active_file, self.active_users)
+                save_json(self.active_file, self.active_users)
         else:
             pool = [uid for uid in active_pool.keys() if uid not in excluded]
 
@@ -521,7 +476,7 @@ class RandomWifePlugin(Star):
             timestamp=timestamp,
         )
 
-        self._save_json(self.records_file, self.records)
+        save_json(self.records_file, self.records)
 
         avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={wife_id}&spec=640"
         suffix_text = (
@@ -632,7 +587,7 @@ class RandomWifePlugin(Star):
             )
             return
 
-        target_id = self._extract_target_id_from_message(event)
+        target_id = extract_target_id_from_message(event)
 
         if not target_id or target_id == "all":
             yield event.plain_result("请 @ 一个你想强娶的人。")
@@ -684,7 +639,7 @@ class RandomWifePlugin(Star):
 
         self.rbq_stats[group_id][target_id].append(time.time())
         self._clean_rbq_stats()  # 记录时顺便清理
-        self._save_json(self.rbq_stats_file, self.rbq_stats)
+        save_json(self.rbq_stats_file, self.rbq_stats)
 
         # 移除该群该用户今日的其他老婆记录
         group_records[:] = [r for r in group_records if r["user_id"] != user_id]
@@ -714,8 +669,8 @@ class RandomWifePlugin(Star):
         # --- 更新该群的强娶冷却时间 ---
         self.forced_records[group_id][user_id] = now
 
-        self._save_json(self.records_file, self.records)
-        self._save_json(self.forced_file, self.forced_records)
+        save_json(self.records_file, self.records)
+        save_json(self.forced_file, self.forced_records)
 
         avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={target_id}&spec=640"
         text = f" 你今天强娶了【{target_name}】哦❤️~\n请对她好一点哦~。\n"
@@ -738,23 +693,6 @@ class RandomWifePlugin(Star):
             Comp.Image.fromURL(avatar_url),
         ]
         yield event.chain_result(chain)
-
-    @staticmethod
-    def _extract_target_id_from_message(event: AstrMessageEvent) -> str | None:
-        for component in event.message_obj.message:
-            if isinstance(component, Comp.At):
-                return str(component.qq)
-
-        raw_text = str(getattr(event, "message_str", "") or "")
-        cq_at = re.search(r"\[CQ:at,qq=(\d+)\]", raw_text)
-        if cq_at:
-            return cq_at.group(1)
-
-        plain_at = re.search(r"@(\d{5,12})", raw_text)
-        if plain_at:
-            return plain_at.group(1)
-
-        return None
 
     @filter.command("关系图")
     async def show_graph(self, event: AstrMessageEvent):
@@ -957,7 +895,7 @@ class RandomWifePlugin(Star):
 
     async def _cmd_reset_records(self, event: AstrMessageEvent):
         self.records = {"date": datetime.now().strftime("%Y-%m-%d"), "groups": {}}
-        self._save_json(self.records_file, self.records)
+        save_json(self.records_file, self.records)
         yield event.plain_result("今日抽取记录已重置！")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -971,7 +909,7 @@ class RandomWifePlugin(Star):
 
         if hasattr(self, "forced_records") and group_id in self.forced_records:
             self.forced_records[group_id] = {}
-            self._save_json(self.forced_file, self.forced_records)
+            save_json(self.forced_file, self.forced_records)
 
             logger.info(f"[Wife] 已重置群 {group_id} 的强娶冷却时间")
             yield event.plain_result("✅ 本群强娶冷却时间已重置！现在大家可以再次强娶了。")
@@ -1121,10 +1059,10 @@ class RandomWifePlugin(Star):
             yield event.plain_result(f"Render failed: {e}")
 
     async def terminate(self):
-        self._save_json(self.records_file, self.records)
-        self._save_json(self.active_file, self.active_users)
-        self._save_json(self.forced_file, self.forced_records)
-        self._save_json(self.rbq_stats_file, self.rbq_stats)
+        save_json(self.records_file, self.records)
+        save_json(self.active_file, self.active_users)
+        save_json(self.forced_file, self.forced_records)
+        save_json(self.rbq_stats_file, self.rbq_stats)
 
         # 取消尚未执行的撤回任务，避免插件卸载后仍调用协议端。
         for task in tuple(self._withdraw_tasks):
