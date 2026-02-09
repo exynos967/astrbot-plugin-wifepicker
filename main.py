@@ -190,11 +190,14 @@ class RandomWifePlugin(Star):
             yield result
 
     async def _cmd_draw_wife(self, event: AstrMessageEvent):
+        # 清理完不在群的人后
+        
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
 
         group_id = str(event.get_group_id())
+        save_json(self.active_file, self.active_users, self.active_file, self.config)
         if not is_allowed_group(group_id, self.config):
             return
 
@@ -331,7 +334,7 @@ class RandomWifePlugin(Star):
             timestamp=timestamp,
         )
 
-        save_json(self.records_file, self.records)
+        save_json(self.records_file, self.records, self.records_file, self.config)
 
         avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={wife_id}&spec=640"
         suffix_text = (
