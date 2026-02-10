@@ -150,12 +150,20 @@ class RandomWifePlugin(Star):
         # 1. 检查开关
         if not self.config.get("keyword_trigger_enabled", False):
             return
-        
+
         message_str = event.message_str
         if not message_str: return
 
-        # 2. 如果消息本身就带了 / 或 !，说明是正规指令，交给 @filter.command 去处理
-        # 这样可以防止一条指令触发两次
+        # 2. @bot / 唤醒前缀场景下跳过，交给 @filter.command 处理。
+        #    原因：WakingCheckStage 会把 keyword_trigger（EventMessageTypeFilter 不检查
+        #    is_at_or_wake_command）和对应的 CommandFilter handler 同时加入
+        #    activated_handlers；而 StarRequestSubStage 在每个 handler 执行后调用
+        #    event.clear_result() 会清掉 stop_event() 的标志，导致两个 handler
+        #    依次执行造成双重触发。
+        if event.is_at_or_wake_command:
+            return
+
+        # 3. 如果消息本身就带了 / 或 !，说明是正规指令，交给 @filter.command 去处理
         if message_str.startswith(self._keyword_trigger_block_prefixes):
             return
         # 3. 开始匹配关键词（例如：今日老婆）
