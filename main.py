@@ -28,6 +28,7 @@ from .src.utils import (
     save_json, 
     normalize_user_id_set, 
     extract_target_id_from_message,
+    is_mentioning_self,
     is_allowed_group,           # 新增
     resolve_member_name,        # 新增
 )
@@ -160,7 +161,11 @@ class RandomWifePlugin(Star):
         #    activated_handlers；而 StarRequestSubStage 在每个 handler 执行后调用
         #    event.clear_result() 会清掉 stop_event() 的标志，导致两个 handler
         #    依次执行造成双重触发。
-        if event.is_at_or_wake_command:
+        if getattr(event, "is_at_or_wake_command", False):
+            return
+
+        # 2.1 若消息中直接 @ 机器人自身，也交给 command 流程，避免关键词和命令双触发
+        if is_mentioning_self(event):
             return
 
         # 3. 如果消息本身就带了 / 或 !，说明是正规指令，交给 @filter.command 去处理

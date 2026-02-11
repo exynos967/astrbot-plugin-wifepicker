@@ -5,6 +5,11 @@ from astrbot.api import logger
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
 
+_CQ_AT_RE = re.compile(r"\[CQ:at,qq=(\d+)\]", re.IGNORECASE)
+_LOG_AT_RE = re.compile(r"\[At:(\d+)\]")
+_PLAIN_AT_RE = re.compile(r"[@＠](\d{5,12})")
+
+
 def load_json(path: str, default: object):
     if not os.path.exists(path):
         return default
@@ -71,6 +76,31 @@ def extract_target_id_from_message(event: AstrMessageEvent) -> str | None:
         return plain_at.group(1)
 
     return None
+
+
+def is_mentioning_self(event: AstrMessageEvent) -> bool:
+    self_id = str(getattr(event, "get_self_id", lambda: "")() or "")
+    if not self_id:
+        return False
+
+    message_obj = getattr(event, "message_obj", None)
+    message_chain = getattr(message_obj, "message", []) if message_obj else []
+    for component in message_chain:
+        qq = getattr(component, "qq", None)
+        if qq is not None and str(qq) == self_id:
+            return True
+
+    raw_text = str(getattr(event, "message_str", "") or "")
+    if not raw_text:
+        return False
+
+    for regex in (_CQ_AT_RE, _LOG_AT_RE, _PLAIN_AT_RE):
+        for match in regex.finditer(raw_text):
+            if match.group(1) == self_id:
+                return True
+    return False
+
+
 def is_allowed_group(group_id: str, config: object) -> bool:
     whitelist = config.get("whitelist_groups", [])
     blacklist = config.get("blacklist_groups", [])
